@@ -958,20 +958,12 @@ int ethGetPHYRate
 
 BOOL isEthWanEnabled()
 {
-    char buf[64];
-    memset(buf,0,sizeof(buf));
-    if (syscfg_get(NULL, "eth_wan_enabled", buf, sizeof(buf)) == 0)
+    BOOL bGetStatus = FALSE;
+    if(RETURN_OK != CcspHalExtSw_getEthWanEnable(&bGetStatus))
     {
-        if ( 0 == strcmp(buf,"true"))
-        {
-
-            if ( 0 == access( "/nvram/ETHWAN_ENABLE" , F_OK ) )
-            {
-                return TRUE;
-            }
-        }
+       CcspTraceError((" CcspHalExtSw_getEthWanEnable failed \n"));
     }
-    return FALSE;
+    return bGetStatus;
 }
 
 #ifdef WAN_FAILOVER_SUPPORTED
