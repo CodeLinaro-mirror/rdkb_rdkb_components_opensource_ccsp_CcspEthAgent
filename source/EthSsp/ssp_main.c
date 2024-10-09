@@ -52,7 +52,7 @@
 #include <syscfg/syscfg.h>
 #include "cap.h"
 #include "safec_lib_common.h"
-#if defined(_HUB4_PRODUCT_REQ_) || defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_HUB4_PRODUCT_REQ_) || defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
 #include "cosa_rbus_handler_apis.h"
 #include "cosa_apis_util.h"
 #endif

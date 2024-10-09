@@ -73,7 +73,7 @@
 #include "cosa_common_util.h"
 #endif
 
-#if defined(_PLATFORM_RASPBERRYPI_)
+#if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_BANANAPI_R4_)
 extern int sock;
 #endif
 

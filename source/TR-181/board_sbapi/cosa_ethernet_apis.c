@@ -586,6 +586,8 @@ COSA_DML_IF_STATUS getIfStatus(const PUCHAR name, struct ifreq *pIfr)
 #define ETHWAN_DEF_INTF_NAME "nsgmii0"
 #elif defined (_PLATFORM_TURRIS_)
 #define ETHWAN_DEF_INTF_NAME "eth2"
+#elif defined (_PLATFORM_BANANAPI_R4_)
+#define ETHWAN_DEF_INTF_NAME "lan0"
 #else
 #define ETHWAN_DEF_INTF_NAME "eth0"
 #endif
@@ -2743,7 +2745,8 @@ CosaDmlEthInit(
         }
     }
 #else
-    #if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_TURRIS_)
+    #if defined(_PLATFORM_RASPBERRYPI_) || defined(_PLATFORM_TURRIS_) || defined(_PLATFORM_BANANAPI_R4_)
+
     char wanPhyName[20] = {0},out_value[20] = {0};
 
     if (!syscfg_get(NULL, "wan_physical_ifname", out_value, sizeof(out_value)))
@@ -2934,7 +2937,11 @@ CosaDmlEthPortInit(
         pETHlinkTemp[iLoopCount].LinkStatus = ETH_LINK_STATUS_DOWN;
         pETHlinkTemp[iLoopCount].ulInstanceNumber = iLoopCount + 1;
         // Get  Name.
-        snprintf(pETHlinkTemp[iLoopCount].Name, sizeof(pETHlinkTemp[iLoopCount].Name), "eth%d", iLoopCount);
+	#if defined (_PLATFORM_BANANAPI_R4_)
+		snprintf(pETHlinkTemp[iLoopCount].Name, sizeof(pETHlinkTemp[iLoopCount].Name), "lan%d", iLoopCount);
+	#else	
+                snprintf(pETHlinkTemp[iLoopCount].Name, sizeof(pETHlinkTemp[iLoopCount].Name), "eth%d", iLoopCount);
+	#endif		
         snprintf(pETHlinkTemp[iLoopCount].Path, sizeof(pETHlinkTemp[iLoopCount].Path), "%s%d", ETHERNET_IF_PATH, iLoopCount + 1);
         pETHlinkTemp[iLoopCount].Upstream = FALSE;
         pETHlinkTemp[iLoopCount].WanValidated = FALSE;
@@ -3014,6 +3021,9 @@ CosaDmlEthPortInit(
                 snprintf(pETHTemp->Name, sizeof(pETHTemp->Name), "sw_%d", iLoopCount + 1);
             }
             CcspTraceWarning(("\n ifname copied %s index %d\n",pETHTemp->Name,iLoopCount));
+#elif defined (_PLATFORM_BANANAPI_R4_)	    
+
+	    snprintf(pETHTemp->Name, sizeof(pETHTemp->Name), "lan%d", iLoopCount);
 #else
             // Generate Name.
             snprintf(pETHTemp->Name, sizeof(pETHTemp->Name), "eth%d", iLoopCount);
@@ -3110,7 +3120,11 @@ ANSC_STATUS CosDmlEthPortUpdateGlobalInfo(PANSC_HANDLE phContext, char *ifname, 
         gpstEthGInfo[newIndex].LinkStatus = ETH_LINK_STATUS_DOWN;
         gpstEthGInfo[newIndex].WanValidated = TRUE; //Make default as True.
         gpstEthGInfo[newIndex].Enable = FALSE; //Make default as False.
-        snprintf(gpstEthGInfo[newIndex].Name, sizeof(gpstEthGInfo[newIndex].Name), "eth%d", newIndex);
+        #if defined(_PLATFORM_BANANAPI_R4_)
+		snprintf(gpstEthGInfo[newIndex].Name, sizeof(gpstEthGInfo[newIndex].Name), "lan%d", newIndex);
+        #else	
+        	snprintf(gpstEthGInfo[newIndex].Name, sizeof(gpstEthGInfo[newIndex].Name), "eth%d", newIndex);
+	#endif		
         snprintf(gpstEthGInfo[newIndex].Path, sizeof(gpstEthGInfo[newIndex].Path), "%s%d", ETHERNET_IF_PATH, newIndex + 1 );
         snprintf(gpstEthGInfo[newIndex].LowerLayers, sizeof(gpstEthGInfo[newIndex].LowerLayers), "%s%d", ETHERNET_IF_LOWERLAYERS, newIndex + 1 );
         pthread_mutex_unlock(&gmEthGInfo_mutex);
@@ -3248,7 +3262,12 @@ ANSC_STATUS CosaDmlEthGetPortCfg(INT nIndex, PCOSA_DML_ETH_PORT_CONFIG pEthLink)
         pEthLink->WanStatus = wan_status;
     }
 
-    snprintf(pEthLink->Name, sizeof(pEthLink->Name), "eth%d", nIndex);
+#if defined(_PLATFORM_BANANAPI_R4_)
+    	 snprintf(pEthLink->Name, sizeof(pEthLink->Name), "lan%d", nIndex);
+#else	 
+
+    	 snprintf(pEthLink->Name, sizeof(pEthLink->Name), "eth%d", nIndex);
+#endif	 
 #else
     UNREFERENCED_PARAMETER(nIndex);
     UNREFERENCED_PARAMETER(pEthLink);
@@ -3716,6 +3735,8 @@ static ANSC_STATUS CosDmlEthPortPrepareGlobalInfo()
                 snprintf(gpstEthGInfo[iLoopCount].Name, sizeof(gpstEthGInfo[iLoopCount].Name), "sw_%d", iLoopCount+1);
             }
             CcspTraceWarning(("\n ifname copied %s index %d\n",gpstEthGInfo[iLoopCount].Name,iLoopCount));
+#elif defined (_PLATFORM_BANANAPI_R4_)
+	    snprintf(gpstEthGInfo[iLoopCount].Name, sizeof(gpstEthGInfo[iLoopCount].Name), "lan%d", iLoopCount);
 #else
             snprintf(gpstEthGInfo[iLoopCount].Name, sizeof(gpstEthGInfo[iLoopCount].Name), "eth%d", iLoopCount);
 #endif
