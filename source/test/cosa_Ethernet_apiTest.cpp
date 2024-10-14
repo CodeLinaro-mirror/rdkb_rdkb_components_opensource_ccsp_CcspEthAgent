@@ -89,6 +89,12 @@ ACTION_P(CheckIntArg2, expectedValue) {
   EXPECT_EQ(expectedValue, static_cast<int>(arg2)); // Assuming arg2 is of type const int
 }
 
+ACTION_P(SetBoolArg0,value)
+{
+
+       *static_cast<BOOLEAN*>(arg0)=value;
+}
+
 
 TEST_F(CcspEthagentTestFixture,positivecaseCosaDmlEthGetLogStatus)
 {
@@ -190,41 +196,33 @@ TEST_F(CcspEthagentTestFixture,FailcaseCosaDmlEthGetLogStatus)
 TEST_F(CcspEthagentTestFixture, PositivecaseisEthWanEnabled)
 {
 	
-         char buf[16]="true";
-//printf("PositivecaseisEthWanEnabled\n");
-         EXPECT_CALL(*g_syscfgMock, syscfg_get( _, StrEq("eth_wan_enabled"), _, _))
+         bool Enable=true;
+	 EXPECT_CALL(*g_ethSwHALMock,CcspHalExtSw_getEthWanEnable(_))
                 .Times(1)
                 .WillOnce(::testing::DoAll(
-                    SetArgNPointeeTo<2>(std::begin(buf), sizeof(buf)),
-                    ::testing::Return(0)
-                ));
-	
-         EXPECT_CALL(*g_fileIOMock, access(StrEq("/nvram/ETHWAN_ENABLE"),F_OK))
-                .Times(1)
-                .WillOnce(Return(0));
+                          SetBoolArg0(Enable),
+                          ::testing::Return(RETURN_OK)));
          EXPECT_EQ(TRUE, isEthWanEnabled());
 }
 TEST_F(CcspEthagentTestFixture, NegtivecaseisEthWanEnabled)
 {
-	char buf[16]="false";
-       	EXPECT_CALL(*g_syscfgMock, syscfg_get( _, StrEq("eth_wan_enabled"), _, _))
+	bool Enable=false;
+       	 EXPECT_CALL(*g_ethSwHALMock,CcspHalExtSw_getEthWanEnable(_))
                 .Times(1)
                 .WillOnce(::testing::DoAll(
-                    SetArgNPointeeTo<2>(std::begin(buf), sizeof(buf)),
-                    ::testing::Return(0)
-                ));
+                          SetBoolArg0(Enable),
+                          ::testing::Return(RETURN_OK)));
 	EXPECT_EQ(FALSE, isEthWanEnabled());
 }
 
 TEST_F(CcspEthagentTestFixture, FailcaseisEthWanEnabled)
 {
-  char buf[16]="true";
-  EXPECT_CALL(*g_syscfgMock, syscfg_get( _, StrEq("eth_wan_enabled"), _, _))
-         .Times(1)
-         .WillOnce(::testing::DoAll(
-           SetArgNPointeeTo<2>(std::begin(buf), sizeof(buf)),
-           ::testing::Return(-1)
-        ));
+  bool Enable=false;
+   EXPECT_CALL(*g_ethSwHALMock,CcspHalExtSw_getEthWanEnable(_))
+                .Times(1)
+                .WillOnce(::testing::DoAll(
+                          SetBoolArg0(Enable),
+                          ::testing::Return(!RETURN_OK)));
   EXPECT_EQ(FALSE, isEthWanEnabled());
 }
 
@@ -544,11 +542,6 @@ ACTION_P(SetUintArg0,value)
 {
 
        *static_cast<UINT*>(arg0)=value;
-}
-ACTION_P(SetBoolArg0,value)
-{
-
-       *static_cast<BOOLEAN*>(arg0)=value;
 }
 
 
