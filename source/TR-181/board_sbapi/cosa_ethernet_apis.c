@@ -1319,6 +1319,7 @@ INT WanBridgeConfigurationBcm(WAN_MODE_BRIDGECFG *pCfg)
                 // BCOMB-1508 - update 2 into /sys/class/net/erouter0/netdev_group
                 v_secure_system("ip link set dev %s group 2", pCfg->wanPhyName);
                 v_secure_system("echo addif %s > /proc/driver/flowmgr/cmd", pCfg->wanPhyName);
+		v_secure_system("echo wandev %s > /proc/driver/flowmgr/cmd", pCfg->wanPhyName);
                 v_secure_system("echo delif %s > /proc/driver/flowmgr/cmd", ETHWAN_DOCSIS_INF_NAME);
             }
             else
