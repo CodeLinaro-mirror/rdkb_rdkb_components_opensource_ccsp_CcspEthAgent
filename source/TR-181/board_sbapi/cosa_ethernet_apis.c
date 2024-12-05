@@ -122,31 +122,6 @@ token_t sysevent_led_token;
 extern char g_Subsystem[32];
 extern ANSC_HANDLE bus_handle;
 
-typedef enum _ETH_WAN_LINK_STATUS__
-{
-    LINK_DOWN,
-    LINK_UP,
-    LINK_NONE
-} ETH_WAN_LINK_STATUS;
-
-typedef enum _ETH_WAN_LINK_UP_WINDOW_STATUS__
-{
-    LINK_UP_WINDOW_STARTED,
-    LINK_UP_WINDOW_SETTLING_DOWN,
-    LINK_UP_WINDOW_ENDED,
-    LINK_UP_WINDOW_NONE
-} ETH_WAN_LINK_UP_WINDOW_STATUS;
-
-static time_t upCallbackTime, downCallbackTime;
-static ETH_WAN_LINK_STATUS eEthWanStatus = LINK_NONE;
-static ETH_WAN_LINK_UP_WINDOW_STATUS eEthWanUpWindowStatus = LINK_UP_WINDOW_NONE;
-pthread_mutex_t gEthWanDownMutex = PTHREAD_MUTEX_INITIALIZER;
-static BOOL bIsEthWanLinkMonitorThreadRunning = FALSE;
-
-#define ETH_WAN_LINK_DOWN_WINDOW_SIZE     15 /*seconds*/
-#define ETH_WAN_LINK_UP_WINDOW_SIZE       30 /*seconds*/
-#define UNUSED(x) (void)(x)
-
 #define PSM_ETHMANAGER_CFG_COUNT  "dmsb.ethagent.ethifcount"
 #define PSM_ETHMANAGER_CFG_NAME   "dmsb.ethagent.if.%d.Name"
 #define PSM_ETHMANAGER_LAN_BRIDGE_PORT  "dmsb.ethagent.lanBridgePort"
@@ -4715,35 +4690,6 @@ static ANSC_STATUS  GetWan_InterfaceName (char* wanoe_ifacename, int length) {
 void EthWanLinkUp_callback() {
     char wanoe_ifname[WANOE_IFACENAME_LENGTH] = {0};
 
-    struct timespec timeSpec = {0};
-    upCallbackTime = 0;
-    CcspTraceInfo(("%s:%d, Wanoe interface link up event received \n", __FUNCTION__,__LINE__));
-    eEthWanStatus = LINK_UP;
-
-    if (clock_gettime (CLOCK_MONOTONIC, &timeSpec) == -1)
-    {
-        CcspTraceError(("%s:%d, clock_gettime failed\n", __FUNCTION__,__LINE__));
-    }
-    else
-    {
-        upCallbackTime = timeSpec.tv_sec;
-        CcspTraceInfo(("%s:%d, Time when link up callback is received %ld\n", __FUNCTION__,__LINE__,timeSpec.tv_sec));
-    }
-
-    pthread_mutex_lock(&gEthWanDownMutex);
-    if (LINK_UP_WINDOW_ENDED == eEthWanUpWindowStatus || LINK_UP_WINDOW_STARTED == eEthWanUpWindowStatus)
-    {
-        eEthWanUpWindowStatus = LINK_UP_WINDOW_NONE;
-        CcspTraceInfo(("%s:%d, Eth Wan Link up Monitor thread was running, igonore the link up callback\n", __FUNCTION__,__LINE__));
-        pthread_mutex_unlock(&gEthWanDownMutex);
-        return;
-    }
-    else if (LINK_UP_WINDOW_SETTLING_DOWN == eEthWanUpWindowStatus)
-    {
-        eEthWanUpWindowStatus = LINK_UP_WINDOW_NONE;
-    }
-    pthread_mutex_unlock(&gEthWanDownMutex);
-
 #ifdef AUTOWAN_ENABLE
         char redirFlag[10]={0};
         char captivePortalEnable[10]={0};
@@ -4801,91 +4747,6 @@ void EthWanLinkUp_callback() {
     }
 }
 
-void setEthWanDown(void)
-{
-    char wanoe_ifname[WANOE_IFACENAME_LENGTH] = {0};
-    CcspTraceInfo(("%s:%d, Entry\n", __FUNCTION__,__LINE__));
-#ifdef AUTOWAN_ENABLE
-#if !defined(WAN_MANAGER_UNIFICATION_ENABLED)
-    if (FALSE == isEthWanEnabled())
-    {
-        return;
-    }
-#endif
-    v_secure_system("sysevent set phylink_wan_state down");
-
-#if defined (FEATURE_RDKB_LED_MANAGER_LEGACY_WAN)
-    sysevent_led_fd =  sysevent_open("127.0.0.1", SE_SERVER_WELL_KNOWN_PORT, SE_VERSION, "wanHandler", &sysevent_led_token);
-    if(sysevent_led_fd != -1)
-    {
-        sysevent_set(sysevent_led_fd, sysevent_led_token, SYSEVENT_LED_STATE, IPV4_DOWN_EVENT, 0);
-        CcspTraceInfo (("[%s][%d] Successfully sent IPV4_DOWN_EVENT to RdkledManager\n", __FUNCTION__,__LINE__));
-    }
-
-    if (0 <= sysevent_led_fd)
-    {
-        sysevent_close(sysevent_led_fd, sysevent_led_token);
-    }
-#endif
-
-#if defined (WAN_FAILOVER_SUPPORTED)
-    publishEWanLinkStatus(false);
-#endif
-
-#endif
-
-#if defined (_CBR2_PRODUCT_REQ_)
-     CcspTraceInfo(("%s: EthWan link down, Setting LED to WHITE FAST BLINK \n", __FUNCTION__));
-     EthWanSetLED(WHITE, BLINK, 5);
-#endif
-    if (ANSC_STATUS_SUCCESS == GetWan_InterfaceName (wanoe_ifname, sizeof(wanoe_ifname))) {
-       // Update always Ethwan interface name into global structure if macsec is enabled.
-#if defined(INTEL_PUMA7)
-       CosaDmlEthPortSetName(ETHWAN_DEF_INTF_NAME,wanoe_ifname);
-#endif
-        CcspTraceInfo (("[%s][%d] WANOE [%s] interface link down event received \n", __FUNCTION__,__LINE__,wanoe_ifname));
-        if ( TRUE == CosaDmlEthPortLinkStatusCallback (wanoe_ifname, WANOE_IFACE_DOWN)) {
-            CcspTraceInfo (("[%s][%d] Successfully posted WANOE [%s] interface link down event to message queue\n", __FUNCTION__,__LINE__,wanoe_ifname));
-        }else {
-            CcspTraceError (("[%s][%d] Failed to post WANOE [%s] interface link down event to message queue\n", __FUNCTION__,__LINE__,wanoe_ifname));
-        }
-    }
-    CcspTraceInfo (( "%s:%d, End\n", __FUNCTION__,__LINE__));
-}
-
-void * ethWanLinkMonitorThread(void * pArg)
-{
-    CcspTraceInfo (("%s:%d, Entry\n",__FUNCTION__,__LINE__));
-    pthread_detach(pthread_self());
-    UNUSED(pArg);
-
-    pthread_mutex_lock(&gEthWanDownMutex);
-    eEthWanUpWindowStatus = LINK_UP_WINDOW_STARTED;
-    for (int iVar = 0; iVar < ETH_WAN_LINK_UP_WINDOW_SIZE; iVar++)
-    {
-        if (eEthWanStatus == LINK_UP)
-        {
-            CcspTraceInfo (("%s:%d, Received link up event Within 30 seconds, ignoring link down event\n",__FUNCTION__,__LINE__));
-            eEthWanUpWindowStatus = LINK_UP_WINDOW_ENDED;
-            bIsEthWanLinkMonitorThreadRunning = FALSE;
-            pthread_mutex_unlock(&gEthWanDownMutex);
-            return NULL;
-        }
-        sleep(1);
-    }
-    CcspTraceInfo (("%s:%d, 30 seconds timeout, setting EthWan down\n",__FUNCTION__,__LINE__));
-    if (eEthWanStatus == LINK_DOWN)
-    {
-        eEthWanUpWindowStatus = LINK_UP_WINDOW_SETTLING_DOWN;
-        setEthWanDown();
-    }
-    bIsEthWanLinkMonitorThreadRunning = FALSE;
-    pthread_mutex_unlock(&gEthWanDownMutex);
-    return NULL;
-}
-
-
-#if 0
 /**
  * @Note Callback invoked upon wanoe interface link up from HAL.
  */
@@ -4938,76 +4799,6 @@ void EthWanLinkDown_callback() {
         }
     }
 }
-#else
-
-/**
- * @Note Callback invoked upon wanoe interface link up from HAL.
- */
-void EthWanLinkDown_callback()
-{
-    pthread_t threadId;
-    static pthread_mutex_t ethWanLinkMonitorThreadMutex = PTHREAD_MUTEX_INITIALIZER;
-    struct timespec timeSpec = {0};
-    downCallbackTime = 0;
-
-    if (clock_gettime(CLOCK_MONOTONIC, &timeSpec) != 0)
-    {
-        CcspTraceError (("%s:%d, Failed to get time\n",__FUNCTION__,__LINE__));
-    }
-    else
-    {
-        CcspTraceInfo (("%s:%d, Time when link down callback is received %ld\n",__FUNCTION__,__LINE__,timeSpec.tv_sec));
-        downCallbackTime = timeSpec.tv_sec;
-    }
-
-    if (eEthWanStatus == LINK_NONE)
-    {
-        CcspTraceError (("%s:%d, Received link down event without link up event\n",__FUNCTION__,__LINE__));
-        eEthWanStatus = LINK_DOWN;
-        setEthWanDown();
-    }
-    else if (eEthWanStatus == LINK_UP)
-    {
-        CcspTraceInfo (("%s:%d, Wanoe interface link down event received \n",__FUNCTION__,__LINE__));
-        eEthWanStatus = LINK_DOWN;
-        double dTimeInSeconds = difftime(downCallbackTime, upCallbackTime);
-        CcspTraceInfo (("%s:%d, Time difference between link up and link down %f\n",__FUNCTION__,__LINE__,dTimeInSeconds));
-
-        if (dTimeInSeconds <= ETH_WAN_LINK_DOWN_WINDOW_SIZE)
-        {
-            pthread_mutex_lock(&ethWanLinkMonitorThreadMutex);
-            if (FALSE == bIsEthWanLinkMonitorThreadRunning)
-            {
-                /*Create a thread and monitor for ETH_WAN_LINK_UP_WINDOW_SIZE seconds to link up */
-                int iRet = pthread_create (&threadId, NULL, ethWanLinkMonitorThread,NULL);
-                if (0 != iRet)
-                {
-                    CcspTraceError (("%s:%d, Failed to start the EthWanLinkMonitorThread:%d\n",__FUNCTION__,__LINE__, iRet));
-                }
-                else
-                {
-                    bIsEthWanLinkMonitorThreadRunning = TRUE;
-                    CcspTraceInfo (("%s:%d, EthWanLinkMonitorThread started successfully\n",__FUNCTION__,__LINE__));
-                }
-            }
-            else
-            {
-                CcspTraceInfo (("%s:%d, EthWanLinkMonitorThread is already running\n",__FUNCTION__,__LINE__));
-            }
-            pthread_mutex_unlock(&ethWanLinkMonitorThreadMutex);
-        }
-        else
-        {
-            setEthWanDown();
-        }
-    }
-    else
-    {
-        setEthWanDown();
-    }
-}
-
-#endif
 #endif // defined (FEATURE_RDKB_WAN_MANAGER)
 #endif // defined (FEATURE_RDKB_WAN_MANAGER) || defined (FEATURE_RDKB_WAN_AGENT)
 #ifdef FEATURE_RDKB_WAN_UPSTREAM
